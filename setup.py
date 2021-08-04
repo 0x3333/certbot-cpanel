@@ -1,20 +1,20 @@
 from setuptools import setup
 from setuptools import find_packages
 
-version = '0.2.2'
+version = '0.1.0'
 
 with open('README.md') as f:
     readme = f.read()
 
 setup(
-    name='certbot-dns-cpanel',
+    name='certbot-cpanel',
     version=version,
-    description='certbot plugin to allow acme dns-01 authentication of a name managed in cPanel.',
+    description='certbot plugin to allow acme dns-01 authentication name and certificate installation in a cPanel.',
     long_description=readme,
     long_description_content_type='text/markdown',
-    url='https://github.com/badjware/certbot-dns-cpanel',
-    author='Massaki Archambault',
-    author_email='badjware@massaki.ca',
+    url='https://github.com/0x3333/certbot-cpanel',
+    author='Tercio Filho',
+    author_email='terciofilho@gmail.com',
     license='Apache Licence 2.0',
     packages=find_packages(),
     classifiers=[
@@ -31,14 +31,15 @@ setup(
         'Topic :: System :: Systems Administration',
         'Topic :: Utilities',
     ],
-    keywords='certbot letsencrypt cpanel dns-01 plugin',
+    keywords='certbot letsencrypt cpanel dns-01 installer plugin',
     install_requires=[
         'certbot',
         'zope.interface',
     ],
     entry_points={
         'certbot.plugins': [
-            'cpanel = certbot_dns_cpanel.dns_cpanel:Authenticator',
+            'auth = certbot_cpanel.dns:Authenticator',
+            'install = certbot_cpanel.installer:Installer',
         ],
     },
 )

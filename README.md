@@ -1,66 +1,86 @@
-# certbot-dns-cpanel
+# certbot-cpanel
 
-Plugin to allow acme dns-01 authentication of a name managed in cPanel. Useful for automating and creating a Let's Encrypt certificate (wildcard or not) for a service with a name managed by cPanel, but installed on a server not managed in cPanel.
+Plugin to allow acme dns-01 authentication and installation of a domain name managed in cPanel. Useful for automating, creating and installing a Let's Encrypt certificate (wildcard or not) for a service with a name managed by cPanel.
 
 ## Named Arguments
 | Argument | Description |
 | --- | --- |
-| --certbot-dns-cpanel:cpanel-credentials &lt;file&gt; | cPanel credentials INI file **(required)** |
-| --certbot-dns-cpanel:cpanel-propagation-seconds &lt;seconds&gt; | The number of seconds to wait for DNS to propagate before asking the ACME server to verify the DNS record (Default: 30) |
+| --certbot-cpanel:auth-url &lt;str&gt; | cPanel URL **(required)** |
+| --certbot-cpanel:auth-username &lt;str&gt; | cPanel username **(required)** |
+| --certbot-cpanel:auth-password &lt;str&gt; | cPanel password |
+| --certbot-cpanel:auth-token &lt;str&gt; | cPanel token |
+| --certbot-cpanel:auth-propagation-seconds &lt;seconds&gt; | The number of seconds to wait for DNS to propagate before asking the ACME server to verify the DNS record (Default: 30) |
+| --certbot-cpanel:install-url &lt;str&gt; | cPanel URL **(required)** |
+| --certbot-cpanel:install-username &lt;str&gt; | cPanel username **(required)** |
+| --certbot-cpanel:install-password &lt;str&gt; | cPanel password |
+| --certbot-cpanel:install-token &lt;str&gt; | cPanel token |
 
 ## Install
 ``` bash
-pip install certbot-dns-cpanel
+python setup.py install
 ```
 
 ## Credentials
-Download the file `credentials.ini.exemple` and rename it to `credentials.ini`. Edit it to set your cPanel url, username and password.
-```
-# The url cPanel url
-# include the scheme and the port number (usually 2083 for https)
-certbot_dns_cpanel:cpanel_url = https://cpanel.exemple.com:2083
+The credentials are passed by argument. You have 2 sets of arguments, one for domain authentication and another one for certificate installation(This allows you to authenticate in a server and install in another).
 
-# The cPanel username
-certbot_dns_cpanel:cpanel_username = user
+The password and token are mutually exclusive.
 
-# The cPanel password
-certbot_dns_cpanel:cpanel_password = hunter2
-```
-
-## Exemple
-You can now run certbot using the plugin and feeding the credentials file.  
-For exemple, to get a wildcard certificate for *.exemple.com and exemple.com:
+## Example
+You can now run certbot using the plugin and feeding the credentials.
+For example, to get a wildcard certificate for *.example.com and example.com and install:
 ``` bash
 certbot certonly \
---authenticator certbot-dns-cpanel:cpanel \
---certbot-dns-cpanel:cpanel-credentials /path/to/credentials.ini \
--d 'exemple.com' \
--d '*.exemple.com'
+  -a certbot-cpanel:auth \
+  --certbot-cpanel:auth-url "https://cpanel.example.com:2083" \
+  --certbot-cpanel:auth-username "myusername" \
+  --certbot-cpanel:auth-token "5jkc9jr0o6q9EIuCn67ew9uFR31XHRZI" \
+  -d 'example.com' \
+  -d '*.example.com'
 ```
 
-You can also specify a installer plugin with the `--installer` option.
+You can also specify a installer plugin with the `-i` option.
 ``` bash
 certbot run \
---authenticator certbot-dns-cpanel:cpanel \
---installer apache \
---certbot-dns-cpanel:cpanel-credentials /path/to/credentials.ini \
--d 'exemple.com' \
--d '*.exemple.com'
+  -a certbot-cpanel:auth \
+  --certbot-cpanel:auth-url "https://cpanel.example.com:2083" \
+  --certbot-cpanel:auth-username "myusername" \
+  --certbot-cpanel:auth-token "5jkc9jr0o6q9EIuCn67ew9uFR31XHRZI" \
+  -i certbot-cpanel:install \
+  --certbot-cpanel:install-url "https://cpanel.example.com:2083" \
+  --certbot-cpanel:install-username "myusername" \
+  --certbot-cpanel:install-token "5jkc9jr0o6q9EIuCn67ew9uFR31XHRZI" \
+  -d 'example.com' \
+  -d '*.example.com'
 ```
 
 ## Docker
-A docker image [badjware/certbot-dns-cpanel](https://hub.docker.com/r/badjware/certbot-dns-cpanel), based on [certbot/certbot](https://hub.docker.com/r/certbot/certbot) is provided for your convenience:
-``` bash
-docker run -it \
--v /path/to/credentials.ini:/tmp/credentials.ini \
-badjware/certbot-dns-cpanel \
-certonly \
---authenticator certbot-dns-cpanel:cpanel \
---certbot-dns-cpanel:cpanel-credentials /tmp/credentials.ini \
--d 'exemple.com' \
--d '*.exemple.com'
+You can build a docker image:
+
+```bash
+docker build --network host -t 0x3333/certbot-cpanel:latest .
+```
+
+And use the image:
+
+```bash
+docker run --rm -it \
+  -v $PWD/log:/var/log/letsencrypt \
+  -v $PWD/etc:/etc/letsencrypt \
+  0x3333/certbot-cpanel:latest \
+    certbot certonly \
+    -a certbot-cpanel:auth \
+    --certbot-cpanel:auth-url "https://cpanel.example.com:2083" \
+    --certbot-cpanel:auth-username "myusername" \
+    --certbot-cpanel:auth-token "5jkc9jr0o6q9EIuCn67ew9uFR31XHRZI" \
+    -d 'example.com' \
+    -d '*.example.com'
 ```
 
 ## Additional documentation
 * https://documentation.cpanel.net/display/DD/Guide+to+cPanel+API+2
 * https://certbot.eff.org/docs/
+
+
+## About this Fork
+
+This fork has modified the original `certbot-dns-cpanel` to add the install option.

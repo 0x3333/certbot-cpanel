@@ -1,4 +1,5 @@
-"""cPanel dns-01 authenticator plugin"""
+"""cPanel client"""
+
 import logging
 import base64
 import json
@@ -12,93 +13,20 @@ except ImportError:
     from urllib import urlencode
     from urllib2 import urlopen, Request
 
-import zope.interface
 
 from certbot import errors
-from certbot import interfaces
-from certbot.plugins import dns_common
 
 
 logger = logging.getLogger(__name__)
 
-@zope.interface.implementer(interfaces.IAuthenticator)
-@zope.interface.provider(interfaces.IPluginFactory)
-class Authenticator(dns_common.DNSAuthenticator):
-    """cPanel dns-01 authenticator plugin"""
 
-    description = "Obtain a certificate using a DNS TXT record in cPanel"
-    problem = "a"
-
-    def __init__(self, *args, **kwargs):
-        super(Authenticator, self).__init__(*args, **kwargs)
-        self.credentials = None
-
-    @classmethod
-    def add_parser_arguments(cls, add): # pylint: disable=arguments-differ
-        super(Authenticator, cls).add_parser_arguments(add, default_propagation_seconds=10)
-        add("credentials",
-            type=str,
-            help="The cPanel credentials INI file")
-
-    def more_info(self): # pylint: disable=missing-docstring
-        return self.description
-
-    def _validate_credentials(self, credentials):
-        url = credentials.conf('url')
-        username  = credentials.conf('username')
-        token = credentials.conf('token')
-        password = credentials.conf('password')
-
-        if not url:
-            raise errors.PluginError('%s: url is required' % credentials.confobj.filename)
-
-        if not username:
-            raise errors.PluginError('%s: username and token (prefered) or password are required' % credentials.confobj.filename)
-
-        if token:
-            if password:
-                logger.warning('%s: token and password are exclusive, token will be used when both are provided' % credentials.confobj.filename)
-        elif not password:
-            raise errors.PluginError('%s: password or token (prefered) are required' % credentials.confobj.filename) 
-
-    def _setup_credentials(self):
-        self.credentials = self._configure_credentials(
-            'credentials',
-            'The cPanel credentials INI file',
-            None,
-            self._validate_credentials
-        )
-
-    def _perform(self, domain, validation_domain_name, validation):
-        self._get_cpanel_client().add_txt_record(validation_domain_name, validation)
-
-    def _cleanup(self, domain, validation_domain_name, validation):
-        self._get_cpanel_client().del_txt_record(validation_domain_name, validation)
-
-    def _get_cpanel_client(self):
-        if not self.credentials:
-            raise errors.Error('No auth data')
-
-        if self.credentials.conf('token'):
-            return _CPanelClient(self.credentials.conf('url'), self.credentials.conf('username'), None, self.credentials.conf('token'))
-        elif self.credentials.conf('password'):
-            return _CPanelClient(self.credentials.conf('url'), self.credentials.conf('username'), self.credentials.conf('password'), None)
-
-        return _CPanelClient(
-            self.credentials.conf('url'),
-            self.credentials.conf('username'),
-            self.credentials.conf('password'),
-            self.credentials.conf('token'),
-        )
-
-class _CPanelClient:
+class CPanelClient:
     """Encapsulate communications with the cPanel API 2"""
     def __init__(self, url, username, password, token):
         self.request_url = "%s/json-api/cpanel" % url
         self.data = {
             'cpanel_jsonapi_user': username,
             'cpanel_jsonapi_apiversion': '2',
-            'cpanel_jsonapi_module': 'ZoneEdit'
         }
 
         if token:
@@ -120,6 +48,7 @@ class _CPanelClient:
         cpanel_zone, cpanel_name = self._get_zone_and_name(record_name)
 
         data = self.data.copy()
+        data['cpanel_jsonapi_module'] = 'ZoneEdit'
         data['cpanel_jsonapi_func'] = 'add_zone_record'
         data['domain'] = cpanel_zone
         data['name'] = cpanel_name
@@ -151,6 +80,7 @@ class _CPanelClient:
         record_lines = self._get_record_line(cpanel_zone, record_name, record_content, record_ttl)
 
         data = self.data.copy()
+        data['cpanel_jsonapi_module'] = 'ZoneEdit'
         data['cpanel_jsonapi_func'] = 'remove_zone_record'
         data['domain'] = cpanel_zone
 
@@ -172,6 +102,36 @@ class _CPanelClient:
             else:
                 raise errors.PluginError("Error removing TXT record: %s" % response_data['data'][0]['result']['statusmsg'])
 
+    def install_crt(self, domain, cabundle, crt, key):
+        """Install a certificate in a domain
+        :param str domain: the domain to use the certificate
+        :param str cabundle: the CA Bundle of the certificate
+        :param str crt: the domain's certificate
+        :param str key: the certificate's key
+        """
+        # cpanel_zone, cpanel_name = self._get_zone_and_name(record_name)
+
+        data = self.data.copy()
+        data['cpanel_jsonapi_module'] = 'SSL'
+        data['cpanel_jsonapi_func'] = 'installssl'
+        data['domain'] = domain
+        data['cabundle'] = cabundle
+        data['crt'] = crt
+        data['key'] = key
+
+        response = urlopen(
+            Request(
+                "%s?%s" % (self.request_url, urlencode(data)),
+                headers=self.headers,
+            )
+        )
+        response_data = json.load(response)['cpanelresult']
+        logger.debug(response_data)
+        if response_data['data'][0]['result'] == 1:
+            logger.info("Successfully installed SSL certificate for %s", domain)
+        else:
+            raise errors.PluginError("Error installing SSL certificate: %s" % response_data['data'][0]['result']['output'])
+
     def _get_zone_and_name(self, record_domain):
         """Find a suitable zone for a domain
         :param str record_name: the domain name
@@ -182,6 +142,7 @@ class _CPanelClient:
         cpanel_name = ''
 
         data = self.data.copy()
+        data['cpanel_jsonapi_module'] = 'ZoneEdit'
         data['cpanel_jsonapi_func'] = 'fetchzones'
 
         response = urlopen(
@@ -213,6 +174,7 @@ class _CPanelClient:
         record_lines = []
 
         data = self.data.copy()
+        data['cpanel_jsonapi_module'] = 'ZoneEdit'
         data['cpanel_jsonapi_func'] = 'fetchzone_records'
         data['domain'] = cpanel_zone
         data['name'] = record_name + '.' if not record_name.endswith('.') else ''
@@ -231,5 +193,3 @@ class _CPanelClient:
         record_lines = [int(d['line']) for d in response_data['data']]
 
         return record_lines
-
-# vim: set ts=4 sw=4:
