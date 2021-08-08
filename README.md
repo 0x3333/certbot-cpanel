@@ -76,6 +76,53 @@ docker run --rm -it \
     -d '*.example.com'
 ```
 
+## Automation several domains on same cPanel instance
+
+```bash
+#!/bin/bash
+
+DOMAINS=("master.com" "customer1.com" "customer2.com" "customer3.com")
+DAYS=7
+
+for domain in ${DOMAINS[@]}; do
+  echo -n "Checking domain $domain... "
+  expirationdate=$(openssl s_client -connect "$domain":443 -servername "$domain" 2>/dev/null | openssl x509 -text | grep 'Not After' | awk '{print $4,$5,$7}')
+  expirationtime=$(date -d "$expirationdate" '+%s')
+  inXdays=$(($(date +%s) + (86400*$DAYS)))
+  if [ $inXdays -gt $expirationtime ]; then
+    entries=("-d" "$domain" "-d" "*.$domain")
+    # Add the cPanel subdomain on main domain(cPanel adds these subdomains on the main domain by design)
+    if [ $domain != "master.com" ]; then
+      customer=$(echo "$domain" | awk -F. '{print $1}')
+      entries+=("-d" "$customer.master.com" "-d" "*.$customer.master.com")
+    fi
+    echo "expiring, renewing..."
+    docker run --rm -it --network host \
+      -v $PWD/log:/var/log/letsencrypt \
+      -v $PWD/etc:/etc/letsencrypt \
+      0x3333/certbot-cpanel \
+        renew \
+        --non-interactive \
+        --expand \
+        --agree-tos \
+        -m admin@master.com \
+        -a certbot-cpanel:auth \
+        --certbot-cpanel:auth-url "https://cpanel.example.com:2083" \
+        --certbot-cpanel:auth-username "myusername" \
+        --certbot-cpanel:auth-token "5jkc9jr0o6q9EIuCn67ew9uFR31XHRZI" \
+        -i certbot-cpanel:install \
+        --certbot-cpanel:install-url "https://cpanel.example.com:2083" \
+        --certbot-cpanel:install-username "myusername" \
+        --certbot-cpanel:install-token "5jkc9jr0o6q9EIuCn67ew9uFR31XHRZI" \
+        ${entries[@]}
+    echo
+  else
+    echo "only expires on $expirationdate, ignoring."
+  fi
+done
+
+```
+
 ## Additional documentation
 * https://documentation.cpanel.net/display/DD/Guide+to+cPanel+API+2
 * https://certbot.eff.org/docs/
