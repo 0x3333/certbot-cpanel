@@ -153,7 +153,7 @@ class CPanelClient:
         )
         response_data = json.load(response)['cpanelresult']
         logger.debug(response_data)
-        matching_zones = {zone for zone in response_data['data'][0]['zones'] if record_domain == zone or record_domain.endswith('.' + zone)}
+        matching_zones = {zone for zone in response_data['data'][0]['zones'] if response_data['data'][0]['zones'][zone] and (record_domain == zone or record_domain.endswith('.' + zone))}
         if matching_zones:
             cpanel_zone = max(matching_zones, key = len)
             cpanel_name = record_domain[:-len(cpanel_zone)-1]
