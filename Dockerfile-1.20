@@ -1,0 +1,5 @@
+FROM certbot/certbot:v1.20.0
+
+COPY . /app
+
+RUN cd /app && pip install certbot-dns-azure && python setup.py install
